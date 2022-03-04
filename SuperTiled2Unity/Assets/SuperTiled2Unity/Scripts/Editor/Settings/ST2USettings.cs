@@ -99,7 +99,7 @@ namespace SuperTiled2Unity.Editor
 
         public float InversePPU { get { return 1.0f / PixelsPerUnit; } }
 
-        internal static ST2USettings GetOrCreateST2USettings()
+        public static ST2USettings GetOrCreateST2USettings()
         {
             var settings = AssetDatabaseEx.LoadFirstAssetByFilterAndExtension<ST2USettings>("t: ST2USettings", "asset");
             if (settings == null)
