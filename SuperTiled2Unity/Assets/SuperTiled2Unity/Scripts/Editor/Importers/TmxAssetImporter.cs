@@ -439,6 +439,20 @@ namespace SuperTiled2Unity.Editor
                         var superPropsCopy = objectsById[so.m_Id].AddComponent<SuperCustomProperties>();
                         EditorUtility.CopySerialized(props, superPropsCopy);
                     }
+
+                    if (so.gameObject.GetSuperPropertyValueBool(StringConstants.Unity_PrefabKeepCollider, false))
+                    {
+                        var origCollider = so.GetComponent<Collider2D>();
+                        if (origCollider != null) {
+                            var colliderCopy = objectsById[so.m_Id].AddComponent(origCollider.GetType());
+                            EditorUtility.CopySerialized(origCollider, colliderCopy);
+                        }
+                        var origSuper = so.GetComponent<SuperColliderComponent>();
+                        if (origSuper != null) {
+                            var superColliderCopy = objectsById[so.m_Id].AddComponent<SuperColliderComponent>();
+                            EditorUtility.CopySerialized(origSuper, superColliderCopy);
+                        }
+                    }
                 }
             }
 

@@ -7,6 +7,7 @@
         public const string Unity_IsTrigger = Unity_Prefix + "IsTrigger";
         public const string Unity_Layer = Unity_Prefix + "layer";
         public const string Unity_PrefabKeepObject = Unity_Prefix + "prefabKeepObject";
+        public const string Unity_PrefabKeepCollider = Unity_Prefix + "prefabKeepCollider";
         public const string Unity_SortingLayer = Unity_Prefix + "SortingLayer";
         public const string Unity_SortingLayerName = Unity_Prefix + "SortingLayerName";
         public const string Unity_SortingOrder = Unity_Prefix + "SortingOrder";
