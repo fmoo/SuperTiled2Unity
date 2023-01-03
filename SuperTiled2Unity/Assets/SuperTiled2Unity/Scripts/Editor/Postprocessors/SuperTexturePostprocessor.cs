@@ -20,6 +20,7 @@ namespace SuperTiled2Unity.Editor
                 TextureImporterSettings settings = new TextureImporterSettings();
                 textureImporter.ReadTextureSettings(settings);
                 settings.spriteGenerateFallbackPhysicsShape = false;
+                settings.spriteAlignment = (int)SpriteAlignment.Custom;
                 textureImporter.SetTextureSettings(settings);
             }
         }

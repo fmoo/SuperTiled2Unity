@@ -139,6 +139,15 @@ namespace SuperTiled2Unity.Editor
                 return;
             }
 
+            var xTiles = new Dictionary<int, XElement>();
+            foreach (var xTile in xTileset.Elements("tile"))
+            {
+                var id = xTile.GetAttributeAs<int>("id");
+                xTiles[id] = xTile;
+            }
+
+            var alignment = xTileset.GetAttributeAs<ObjectAlignment>("objectalignment", ObjectAlignment.Unspecified);
+            var defaultPivot = -ObjectAlignmentToPivot.ToVector3(1, 1, 1, MapOrientation.Orthogonal, alignment);
             for (int i = 0; i < m_TilesetScript.m_TileCount; i++)
             {
                 // Get grid x,y coords
@@ -166,14 +175,42 @@ namespace SuperTiled2Unity.Editor
 
                 // Add the tile to our atlas
                 Rect rcSource = new Rect(srcx, srcy, m_TilesetScript.m_TileWidth, m_TilesetScript.m_TileHeight);
-                atlas.AddTile(i, tex2d, rcSource);
+
+                // Get the per-tile pivot from the tile xml metadata
+                var pivot = defaultPivot;
+                if (xTiles.TryGetValue(i, out var xTile)) {
+                    var xObjectGroup = xTile.Element("objectgroup");
+                    if (xObjectGroup != null) {
+                        foreach (var xObject in xObjectGroup.Elements()) {
+                            if (xObject.Name == "object"
+                                && (
+                                    StringConstants.Unity_Pivot.Equals(xObject.GetAttributeAs<string>("type"), System.StringComparison.OrdinalIgnoreCase) ||
+                                    StringConstants.Unity_Pivot.Equals(xObject.GetAttributeAs<string>("class"), System.StringComparison.OrdinalIgnoreCase)
+                                )
+                                && xObject.Element("point") != null
+                            ) {
+                                float objX = xObject.GetAttributeAs<int>("x");
+                                float objY = xObject.GetAttributeAs<int>("y");
+                                pivot = new Vector3(
+                                    1f - (objX / tex2d.width),
+                                    1f - (objY / tex2d.height),
+                                    0f
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // Set pivot FROM objectgroup/object[@type="unity:pivot"]
+                atlas.AddTile(i, tex2d, rcSource, defaultPivot, pivot);
             }
         }
 
         private void BuildTilesetFromCollection(XElement xTileset, AtlasBuilder atlas)
         {
             m_TilesetScript.m_IsImageCollection = true;
-
+            var alignment = xTileset.GetAttributeAs<ObjectAlignment>("objectalignment", ObjectAlignment.Unspecified);
+            var defaultPivot = -ObjectAlignmentToPivot.ToVector3(1, 1, 1, MapOrientation.Orthogonal, alignment);
             foreach (var xTile in xTileset.Elements("tile"))
             {
                 int tileIndex = xTile.GetAttributeAs<int>("id");
@@ -205,7 +242,30 @@ namespace SuperTiled2Unity.Editor
                     }
 
                     var rcSource = new Rect(0, 0, tex2d.width, tex2d.height);
-                    atlas.AddTile(tileIndex, tex2d, rcSource);
+                    // Get the per-tile pivot from the tile xml metadata
+                    var pivot = defaultPivot;
+                    var xObjectGroup = xTile.Element("objectgroup");
+                    if (xObjectGroup != null) {
+                        foreach (var xObject in xObjectGroup.Elements()) {
+                            if (xObject.Name == "object"
+                                && (
+                                    StringConstants.Unity_Pivot.Equals(xObject.GetAttributeAs<string>("type"), System.StringComparison.OrdinalIgnoreCase) ||
+                                    StringConstants.Unity_Pivot.Equals(xObject.GetAttributeAs<string>("class"), System.StringComparison.OrdinalIgnoreCase)
+                                )
+                                && xObject.Element("point") != null
+                            ) {
+                                float objX = xObject.GetAttributeAs<int>("x");
+                                float objY = xObject.GetAttributeAs<int>("y");
+                                pivot = new Vector3(
+                                    1f - (objX / tex2d.width),
+                                    1f - (objY / tex2d.height),
+                                    0f
+                                );
+                            }
+                        }
+                    }
+
+                    atlas.AddTile(tileIndex, tex2d, rcSource, defaultPivot, pivot);
                 }
             }
         }
@@ -292,8 +352,8 @@ namespace SuperTiled2Unity.Editor
                     collision.m_ObjectId = xObject.GetAttributeAs("id", 0);
                     collision.m_ObjectName = xObject.GetAttributeAs("name", string.Format("Object_{0}", collision.m_ObjectId));
                     collision.m_ObjectType = xObject.GetAttributeAs("type", "");
-                    collision.m_Position.x = xObject.GetAttributeAs("x", 0.0f);
-                    collision.m_Position.y = xObject.GetAttributeAs("y", 0.0f);
+                    collision.m_Position.x = xObject.GetAttributeAs("x", 0.0f) - tile.m_TileOffsetX;
+                    collision.m_Position.y = xObject.GetAttributeAs("y", 0.0f) - tile.m_TileOffsetY;
                     collision.m_Size.x = xObject.GetAttributeAs("width", 0.0f);
                     collision.m_Size.y = xObject.GetAttributeAs("height", 0.0f);
                     collision.m_Rotation = xObject.GetAttributeAs("rotation", 0.0f);

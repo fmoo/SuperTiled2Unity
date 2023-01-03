@@ -21,6 +21,8 @@ namespace SuperTiled2Unity.Editor
 
             public Texture2D AtlasTexture;
             public Rect AtlasRectangle;
+            public Vector2 TiledPivot = Vector2.zero;
+            public Vector2 UnityPivot = Vector2.zero;
 
             public Texture2D PreferredTexture2D
             {
@@ -62,9 +64,9 @@ namespace SuperTiled2Unity.Editor
             m_TilesetScript = tilesetScript;
         }
 
-        public void AddTile(int index, Texture2D texSource, Rect rcSource)
+        public void AddTile(int index, Texture2D texSource, Rect rcSource, Vector2 tiledPivot, Vector2 unityPivot)
         {
-            var atlasTile = new AtlasTile() { Index = index, SourceTexture = texSource, SourceRectangle = rcSource };
+            var atlasTile = new AtlasTile() { Index = index, SourceTexture = texSource, SourceRectangle = rcSource, TiledPivot = tiledPivot, UnityPivot = unityPivot };
             m_AtlasTiles.Add(atlasTile);
         }
 
@@ -217,8 +219,8 @@ namespace SuperTiled2Unity.Editor
                 string spriteName = string.Format("Sprite_{0}_{1}", m_TilesetScript.name, t.Index + 1);
                 string tileName = string.Format("Tile_{0}_{1}", m_TilesetScript.name, t.Index + 1);
 
-                // Create the sprite with the anchor at (0, 0)
-                var sprite = Sprite.Create(t.PreferredTexture2D, t.PreferredRectangle, Vector2.zero, m_TiledAssetImporter.SuperImportContext.Settings.PixelsPerUnit);
+                // Create the sprite according to its pivot
+                var sprite = Sprite.Create(t.PreferredTexture2D, t.PreferredRectangle, t.UnityPivot, m_TiledAssetImporter.SuperImportContext.Settings.PixelsPerUnit);
 
                 sprite.name = spriteName;
                 sprite.hideFlags = HideFlags.HideInHierarchy;
@@ -232,8 +234,11 @@ namespace SuperTiled2Unity.Editor
                 tile.m_Sprite = sprite;
                 tile.m_Width = t.SourceRectangle.width;
                 tile.m_Height = t.SourceRectangle.height;
-                tile.m_TileOffsetX = m_TilesetScript.m_TileOffset.x;
-                tile.m_TileOffsetY = m_TilesetScript.m_TileOffset.y;
+                // NOTE: We adjust the tile offset by the pivot amount(s) to we still render in the correct position.
+                // Tiled and Unity have different pivots because the collision is relative to the Tiled Pivot, but
+                // The Unity Pivot offsets the sprite rendering only.
+                tile.m_TileOffsetX = m_TilesetScript.m_TileOffset.x + ((t.TiledPivot.x + t.UnityPivot.x) * tile.m_Width);
+                tile.m_TileOffsetY = m_TilesetScript.m_TileOffset.y - ((t.TiledPivot.y + t.UnityPivot.y) * tile.m_Height);
                 tile.m_ObjectAlignment = m_TilesetScript.m_ObjectAlignment;
 
                 m_TilesetScript.m_Tiles.Add(tile);

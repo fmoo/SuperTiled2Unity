@@ -275,6 +275,7 @@ namespace SuperTiled2Unity.Editor
                 var renderer = goTile.AddComponent<SpriteRenderer>();
                 renderer.sprite = tile.m_Sprite;
                 renderer.color = superObject.CalculateColor();
+                renderer.spriteSortPoint = SpriteSortPoint.Pivot;
                 Importer.AssignMaterial(renderer, m_ObjectLayer.m_TiledName);
                 Importer.AssignSpriteSorting(renderer);
 
@@ -289,8 +290,13 @@ namespace SuperTiled2Unity.Editor
 
             if (Importer.SuperImportContext.LayerIgnoreMode != LayerIgnoreMode.Collision)
             {
+                var goCollisions = new GameObject();
+                goCollisions.name = string.Format("{0} (Collisions)", superObject.m_TiledName);
+                goCF.AddChildWithUniqueName(goCollisions);
+                goCollisions.transform.localPosition = fromCenter;
+
                 // Add any colliders that were set up on the tile in the collision editor
-                tile.AddCollidersForTileObject(goTile, Importer.SuperImportContext);
+                tile.AddCollidersForTileObject(goCollisions, Importer.SuperImportContext);
             }
 
             // Store a reference to our tile object
