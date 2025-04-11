@@ -149,7 +149,7 @@ namespace SuperTiled2Unity.Editor
                     int reportCount = 5;
                     foreach (var tile in missing.m_MissingSprites.Take(reportCount))
                     {
-                        msg.AppendLine($"Missing sprite {tile.m_SpriteId}: Pos = ({tile.m_Rect.x}, {tile.m_Rect.y}), Size = ({tile.m_Rect.width}x{tile.m_Rect.height}), Pivot = (0, 0)");
+                        msg.AppendLine($"Missing sprite {tile.m_SpriteId}: Pos = ({tile.m_Rect.x}, {tile.m_Rect.y}), Size = ({tile.m_Rect.width}x{tile.m_Rect.height}), Pivot = {tile.m_Pivot}");
                     }
 
                     if (missing.m_MissingSprites.Count > reportCount)
@@ -165,7 +165,7 @@ namespace SuperTiled2Unity.Editor
                     {
                         if (GUILayout.Button($"Add Sprites To '{assetName}'"))
                         {
-                            AddST2USpritesToTexture.AddSpritesToTextureAsset(missing.m_TextureAssetPath, missing.m_MissingSprites.Select(m => m.m_Rect));
+                            AddST2USpritesToTexture.AddSpritesToTextureAsset(missing.m_TextureAssetPath, missing.m_MissingSprites.Select(m => (m.m_Rect, m.m_Pivot)));
                         }
 
                         if (GUILayout.Button($"Inspect '{assetName}'"))

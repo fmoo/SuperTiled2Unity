@@ -37,6 +37,9 @@ namespace SuperTiled2Unity
         public float m_Height;
 
         [ReadOnly]
+        public bool m_HasCustomPivot;
+
+        [ReadOnly]
         public float m_TileOffsetX;
 
         [ReadOnly]

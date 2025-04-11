@@ -44,7 +44,7 @@ namespace SuperTiled2Unity
             }
         }
 
-        public void ReportMissingSprite(string textureAssetPath, int spriteId, int x, int y, int w, int h)
+        public void ReportMissingSprite(string textureAssetPath, int spriteId, int x, int y, int w, int h, Vector2 pivot)
         {
             var missing = m_MissingTileSprites.FirstOrDefault(m => m.m_TextureAssetPath == textureAssetPath);
             if (missing == null)
@@ -54,7 +54,7 @@ namespace SuperTiled2Unity
                 m_MissingTileSprites.Add(missing);
             }
 
-            missing.AddMissingSprite(spriteId, x, y, w, h);
+            missing.AddMissingSprite(spriteId, x, y, w, h, pivot);
         }
 
         public void ReportWrongTextureSize(string textureAssetPath, int expected_w, int expected_h, int actual_w, int actual_h)
@@ -129,12 +129,13 @@ namespace SuperTiled2Unity
             public string m_TextureAssetPath;
             public List<MissingSprite> m_MissingSprites = new List<MissingSprite>();
 
-            public void AddMissingSprite(int spriteId, int x, int y, int w, int h)
+            public void AddMissingSprite(int spriteId, int x, int y, int w, int h, Vector2 pivot)
             {
                 var missing = new MissingSprite
                 {
                     m_SpriteId = spriteId,
                     m_Rect = new Rect(x, y, w, h),
+                    m_Pivot = pivot,
                 };
 
                 m_MissingSprites.Add(missing);
@@ -145,6 +146,7 @@ namespace SuperTiled2Unity
             {
                 public int m_SpriteId;
                 public Rect m_Rect;
+                public Vector2 m_Pivot;
             }
         }
 

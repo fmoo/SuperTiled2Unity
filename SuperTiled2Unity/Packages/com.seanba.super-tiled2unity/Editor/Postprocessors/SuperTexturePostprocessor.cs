@@ -96,9 +96,9 @@ namespace SuperTiled2Unity.Editor
                 // Use the sprite editor data provider to add/remove sprite rects
                 using (var provider = new SpriteDataProviderWrapper(assetImporter))
                 {
-                    foreach (var rect in tilesetRects)
+                    foreach (var (rect, pivot) in tilesetRects)
                     {
-                        provider.RequiresSuperTiled2UnitySpriteRect(rect);
+                        provider.RequiresSuperTiled2UnitySpriteRect(rect, pivot);
                     }
                 }
             }
@@ -137,18 +137,17 @@ namespace SuperTiled2Unity.Editor
                 m_NewlyImportedST2USpriteRects = new List<SpriteRect>();
             }
 
-            public void RequiresSuperTiled2UnitySpriteRect(Rect rc)
+            public void RequiresSuperTiled2UnitySpriteRect(Rect rc, Vector2 pivot)
             {
-                // Note: We always use a bottom-left pivot
                 // Does the user list already have a sprite rect we can use?
-                if (m_PreviouslyImportedSpriteRects.Any(r => r.rect == rc && r.pivot == Vector2.zero))
+                if (m_PreviouslyImportedSpriteRects.Any(r => r.rect == rc && r.pivot == pivot))
                 {
                     // We are done. The user has provided us with a sprite that will work.
                     return;
                 }
 
                 // Does the ST2U list already have a sprite we can use? If so then add that to our required list.
-                var spriteName = TilesetLoader.RectToSpriteName(rc);
+                var spriteName = TilesetLoader.RectToSpriteName(rc, pivot);
                 var requiredSpriteRect = m_PreviouslyImportedST2USpriteRects.FirstOrDefault(s => s.name == spriteName);
                 if (requiredSpriteRect == null)
                 {
@@ -157,8 +156,8 @@ namespace SuperTiled2Unity.Editor
                         name = spriteName,
                         spriteID = GUID.Generate(),
                         rect = rc,
-                        pivot = Vector2.zero,
-                        alignment = SpriteAlignment.BottomLeft,
+                        pivot = pivot,
+                        alignment = SpriteAlignment.Custom,
                     };
 
                     m_NewlyImportedST2USpriteRects.Add(requiredSpriteRect);

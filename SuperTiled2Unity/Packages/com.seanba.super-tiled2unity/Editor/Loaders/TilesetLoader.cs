@@ -18,9 +18,9 @@ namespace SuperTiled2Unity.Editor
         public const string SpriteNameRoot = "st2u_";
 
         // Make this an ugly name that shouldn't collide with sprites named by the user
-        internal static string RectToSpriteName(Rect rect)
+        internal static string RectToSpriteName(Rect rect, Vector2 pivot)
         {
-            return $"{SpriteNameRoot}x{rect.x}y{rect.y}-w{rect.width}h{rect.height}";
+            return $"{SpriteNameRoot}x{rect.x}y{rect.y}-w{rect.width}h{rect.height}-px{pivot.x}py{pivot.y}";
         }
 
         public TilesetLoader(SuperTileset tileset, TiledAssetImporter importer, int internalId)
@@ -137,9 +137,18 @@ namespace SuperTiled2Unity.Editor
 
                 if (!forceErrorTiles)
                 {
-                    sprites = AssetDatabase.LoadAllAssetsAtPath(textureAssetPath).OfType<Sprite>().SafeToDictionary(s => (s.rect, s.pivot), s => s);
+                    sprites = AssetDatabase.LoadAllAssetsAtPath(textureAssetPath).OfType<Sprite>().SafeToDictionary(s => (s.rect, new Vector2(Mathf.RoundToInt(s.pivot.x), Mathf.RoundToInt(s.pivot.y))), s => s);
                 }
             }
+
+            var xTiles = new Dictionary<int, XElement>();
+            foreach (var xTile in xTileset.Elements("tile"))
+            {
+                var id = xTile.GetAttributeAs<int>("id");
+                xTiles[id] = xTile;
+            }
+            var alignment = xTileset.GetAttributeAs<ObjectAlignment>("objectalignment", ObjectAlignment.Unspecified);
+            var defaultPivot = -ObjectAlignmentToPivot.ToVector3(1, 1, 1, MapOrientation.Orthogonal, alignment);
 
             for (int i = 0; i < m_SuperTileset.m_TileCount; i++)
             {
@@ -163,11 +172,36 @@ namespace SuperTiled2Unity.Editor
                 // In Tiled, texture origin is the top-left. However, in Unity the origin is bottom-left.
                 srcy = (textureHeight - srcy) - tileHeight;
 
-                if (forceErrorTiles || !TryAddTile(i, srcx, srcy, tileWidth, tileHeight, sprites))
+                // Get the per-tile pivot from the tile xml metadata
+                Vector2 pivot = defaultPivot * new Vector2(tileWidth, tileHeight);
+                if (xTiles.TryGetValue(i, out var xTile)) {
+                    var xObjectGroup = xTile.Element("objectgroup");
+                    if (xObjectGroup != null) {
+                        foreach (var xObject in xObjectGroup.Elements()) {
+                            if (xObject.Name == "object"
+                                && (
+                                    StringConstants.Unity_Pivot.Equals(xObject.GetAttributeAs<string>("type"), System.StringComparison.OrdinalIgnoreCase) ||
+                                    StringConstants.Unity_Pivot.Equals(xObject.GetAttributeAs<string>("class"), System.StringComparison.OrdinalIgnoreCase)
+                                )
+                                && xObject.Element("point") != null
+                            ) {
+                                float objX = xObject.GetAttributeAs<int>("x");
+                                float objY = xObject.GetAttributeAs<int>("y");
+                                pivot = new Vector2(
+                                    objX,
+                                    tileHeight - objY
+                                );
+                            }
+                        }
+                    }
+                }
+                pivot = Vector2Int.RoundToInt(pivot);
+
+                if (forceErrorTiles || !TryAddTile(i, srcx, srcy, tileWidth, tileHeight, pivot, sprites))
                 {
                     if (!string.IsNullOrEmpty(textureAssetPath))
                     {
-                        m_Importer.ReportMissingSprite(textureAssetPath, i, srcx, srcy, tileWidth, tileHeight);
+                        m_Importer.ReportMissingSprite(textureAssetPath, i, srcx, srcy, tileWidth, tileHeight, pivot);
                     }
 
                     AddErrorTile(i, NamedColors.HotPink, tileWidth, tileHeight);
@@ -179,6 +213,8 @@ namespace SuperTiled2Unity.Editor
         {
             m_SuperTileset.m_IsImageCollection = true;
 
+            var alignment = xTileset.GetAttributeAs<ObjectAlignment>("objectalignment", ObjectAlignment.Unspecified);
+            var defaultPivot = -ObjectAlignmentToPivot.ToVector3(1, 1, 1, MapOrientation.Orthogonal, alignment);
             foreach (var xTile in xTileset.Elements("tile"))
             {
                 int tileIndex = xTile.GetAttributeAs<int>("id");
@@ -207,7 +243,7 @@ namespace SuperTiled2Unity.Editor
                         textureAssetPath = AssetDatabase.GetAssetPath(tex2d);
 
                         // The pixels per unit of the sprites must match the pixels per unit of the tileset
-                        sprites = AssetDatabase.LoadAllAssetsAtPath(textureAssetPath).OfType<Sprite>().SafeToDictionary(s => (s.rect, s.pivot), s => s);
+                        sprites = AssetDatabase.LoadAllAssetsAtPath(textureAssetPath).OfType<Sprite>().SafeToDictionary(s => (s.rect, new Vector2(Mathf.RoundToInt(s.pivot.x), Mathf.RoundToInt(s.pivot.y))), s => s);
                         if (sprites.Any())
                         {
                             var firstSprite = sprites.First().Value;
@@ -223,6 +259,28 @@ namespace SuperTiled2Unity.Editor
                     int tile_y = xTile.GetAttributeAs<int>("y", 0);
                     int tile_w = xTile.GetAttributeAs<int>("width", texture_w);
                     int tile_h = xTile.GetAttributeAs<int>("height", texture_h);
+                    // Get the per-tile pivot from the tile xml metadata
+                    Vector2 pivot = defaultPivot * new Vector2(tile_w, tile_h);
+                    var xObjectGroup = xTile.Element("objectgroup");
+                    if (xObjectGroup != null) {
+                        foreach (var xObject in xObjectGroup.Elements()) {
+                            if (xObject.Name == "object"
+                                && (
+                                    StringConstants.Unity_Pivot.Equals(xObject.GetAttributeAs<string>("type"), System.StringComparison.OrdinalIgnoreCase) ||
+                                    StringConstants.Unity_Pivot.Equals(xObject.GetAttributeAs<string>("class"), System.StringComparison.OrdinalIgnoreCase)
+                                )
+                                && xObject.Element("point") != null
+                            ) {
+                                float objX = xObject.GetAttributeAs<int>("x");
+                                float objY = xObject.GetAttributeAs<int>("y");
+                                pivot = new Vector2(
+                                    objX,
+                                    tile_h - objY
+                                );
+                            }
+                        }
+                    }
+                    pivot = Vector2Int.RoundToInt(pivot);
 
                     // In Tiled, texture origin is the top-left. However, in Unity the origin is bottom-left.
                     if (tex2d != null)
@@ -235,27 +293,27 @@ namespace SuperTiled2Unity.Editor
                         if (AssetImporter.GetAtPath(textureAssetPath) is TextureImporter importer && importer.spriteImportMode == SpriteImportMode.Single)
                         {
                             var rect = new Rect(tile_x, tile_y, tile_w, tile_h);
-                            if (!sprites.TryGetValue((rect, Vector2.zero), out Sprite tileSprite))
+                            if (!sprites.TryGetValue((rect, pivot), out Sprite tileSprite))
                             {
                                 // Annoying special case where the source texture is imported as a single sprite
                                 // This may be because the user wants to use the texture both as a native Unity sprite and as part of a Tiled tileset
                                 // In this case we cannot have ST2U split up the texture into sprite rectangles
                                 // We have to create a new sprite with the pivot and size we want and store it in the imported asset
-                                tileSprite = Sprite.Create(tex2d, rect, Vector2.zero, importer.spritePixelsPerUnit);
+                                tileSprite = Sprite.Create(tex2d, rect, new Vector2(pivot.x / tile_w, pivot.y / tile_h), importer.spritePixelsPerUnit);
                                 tileSprite.name = $"Sprite.{Path.GetFileNameWithoutExtension(textureAssetPath)}";
                                 tileSprite.hideFlags = HideFlags.HideInHierarchy;
                                 string uniqueId = $"{tileSprite.name}.{tileIndex}.{m_InternalId}";
                                 m_Importer.SuperImportContext.AddObjectToAsset(uniqueId, tileSprite);
-                                sprites.Add((tileSprite.rect, tileSprite.pivot), tileSprite);
+                                sprites.Add((tileSprite.rect, Vector2Int.RoundToInt(tileSprite.pivot)), tileSprite);
                             }
                         }
                     }
 
-                    if (forceErrorTiles || !TryAddTile(tileIndex, tile_x, tile_y, tile_w, tile_h, sprites))
+                    if (forceErrorTiles || !TryAddTile(tileIndex, tile_x, tile_y, tile_w, tile_h, pivot, sprites))
                     {
                         if (!string.IsNullOrEmpty(textureAssetPath))
                         {
-                            m_Importer.ReportMissingSprite(textureAssetPath, tileIndex, tile_x, tile_y, tile_w, tile_h);
+                            m_Importer.ReportMissingSprite(textureAssetPath, tileIndex, tile_x, tile_y, tile_w, tile_h, pivot);
                         }
 
                         AddErrorTile(tileIndex, NamedColors.DeepPink, tile_w, tile_h);
@@ -264,10 +322,10 @@ namespace SuperTiled2Unity.Editor
             }
         }
 
-        private bool TryAddTile(int tileId, int x, int y, int width, int height, Dictionary<(Rect, Vector2), Sprite> sprites)
+        private bool TryAddTile(int tileId, int x, int y, int width, int height, Vector2 pivot, Dictionary<(Rect, Vector2), Sprite> sprites)
         {
             var rect = new Rect(x, y, width, height);
-            if (sprites.TryGetValue((rect, Vector2.zero), out Sprite tileSprite))
+            if (sprites.TryGetValue((rect, pivot), out Sprite tileSprite))
             {
                 // Create the tile that uses the sprite
                 var tile = SuperTile.CreateSuperTile();
@@ -277,11 +335,14 @@ namespace SuperTiled2Unity.Editor
                 tile.m_Sprite = tileSprite;
                 tile.m_Width = rect.width;
                 tile.m_Height = rect.height;
-                tile.m_TileOffsetX = m_SuperTileset.m_TileOffset.x;
-                tile.m_TileOffsetY = m_SuperTileset.m_TileOffset.y;
+                tile.m_TileOffsetX = m_SuperTileset.m_TileOffset.x + pivot.x;
+                tile.m_TileOffsetY = m_SuperTileset.m_TileOffset.y - pivot.y;
                 tile.m_ObjectAlignment = m_SuperTileset.m_ObjectAlignment;
                 tile.m_TileRenderSize = m_SuperTileset.m_TileRenderSize;
                 tile.m_FillMode = m_SuperTileset.m_FillMode;
+
+                Vector2 defaultPivot = -ObjectAlignmentToPivot.ToVector3(1, 1, 1, MapOrientation.Orthogonal, tile.m_ObjectAlignment);
+                tile.m_HasCustomPivot = defaultPivot * new Vector2(width, height) != pivot;
 
                 if (m_Importer is TsxAssetImporter tsxAssetImporter)
                 {
@@ -403,8 +464,8 @@ namespace SuperTiled2Unity.Editor
                         collision.m_ObjectType = xObject.GetAttributeAs("type", "");
                     }
 
-                    collision.m_Position.x = xObject.GetAttributeAs("x", 0.0f);
-                    collision.m_Position.y = xObject.GetAttributeAs("y", 0.0f);
+                    collision.m_Position.x = xObject.GetAttributeAs("x", 0.0f) - tile.m_TileOffsetX;
+                    collision.m_Position.y = xObject.GetAttributeAs("y", 0.0f) - tile.m_TileOffsetY;
                     collision.m_Size.x = xObject.GetAttributeAs("width", 0.0f);
                     collision.m_Size.y = xObject.GetAttributeAs("height", 0.0f);
                     collision.m_Rotation = xObject.GetAttributeAs("rotation", 0.0f);
