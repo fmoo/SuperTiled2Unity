@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using SuperTiled2Unity.Editor.Geometry;
+using System.Linq;
 
 namespace SuperTiled2Unity.Editor
 {
@@ -28,6 +29,11 @@ namespace SuperTiled2Unity.Editor
             else if (collision.CollisionShapeType == CollisionShapeType.Point)
             {
                 AddPointCollider(go, collision, importContext);
+            }
+            if (go.TryGetComponent<SuperColliderComponent>(out var superCollider))
+            {
+                superCollider.m_ObjectType = collision.m_ObjectType;
+                AddSuperCustomProperties(go, collision, tile, importContext);
             }
 
             // Additional settings on the collider that was just added
@@ -111,6 +117,23 @@ namespace SuperTiled2Unity.Editor
             go.transform.localEulerAngles = new Vector3(0, 0, importContext.MakeRotation(collision.m_Rotation));
 
             go.AddComponent<SuperColliderComponent>();
+        }
+
+        private static void AddSuperCustomProperties(GameObject go, CollisionObject collision, SuperTile tile, SuperImportContext importContext)
+        {
+            var properties = collision.m_CustomProperties.ToList();
+            // Do we have any properties from a tile to add?
+            if (tile != null)
+            {
+                properties.CombineFromSource(tile.m_CustomProperties);
+            }
+
+            // Add properties from our object type (this should be last)
+            properties.AddPropertiesFromType(collision.m_ObjectType, importContext);
+
+            // Sort the properties alphabetically
+            var component = go.AddComponent<SuperCustomProperties>();
+            component.m_Properties = properties.OrderBy(p => p.m_Name).ToList();
         }
     }
 }
