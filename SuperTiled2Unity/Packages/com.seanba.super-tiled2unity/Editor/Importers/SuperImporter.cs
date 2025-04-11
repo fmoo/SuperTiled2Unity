@@ -155,10 +155,10 @@ namespace SuperTiled2Unity.Editor
             ImportErrors.ReportErrorsInDependency(dependencyAssetPath);
         }
 
-        public void ReportMissingSprite(string textureAssetPath, int spriteId, int x, int y, int w, int h)
+        public void ReportMissingSprite(string textureAssetPath, int spriteId, int x, int y, int w, int h, Vector2 pivot)
         {
             AddImportErrorsScriptableObjectIfNeeded();
-            ImportErrors.ReportMissingSprite(textureAssetPath, spriteId, x, y, w, h);
+            ImportErrors.ReportMissingSprite(textureAssetPath, spriteId, x, y, w, h, pivot);
         }
 
         public void ReportWrongTextureSize(string textureAssetPath, int expected_w, int expected_h, int actual_w, int actual_h)

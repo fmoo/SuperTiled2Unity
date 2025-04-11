@@ -21,7 +21,7 @@ namespace SuperTiled2Unity.Editor
             Instance = CreateInstance();
         }
 
-        internal IEnumerable<Rect> GetSpriteRectsForTexture(string assetPathTexture)
+        internal IEnumerable<(Rect, Vector2)> GetSpriteRectsForTexture(string assetPathTexture)
         {
             return m_SpriteRectangles.GetEntriesByTexture(assetPathTexture);
         }
@@ -71,7 +71,7 @@ namespace SuperTiled2Unity.Editor
             var xTiles = xTileset.Elements("tile");
             if (xImage != null)
             {
-                ProcessTilesetSingle(pathTsx, xTileset, xImage);
+                ProcessTilesetSingle(pathTsx, xTileset, xImage, xTiles);
             }
             else
             {
@@ -79,7 +79,7 @@ namespace SuperTiled2Unity.Editor
             }
         }
 
-        private void ProcessTilesetSingle(string pathTsx, XElement xTileset, XElement xImage)
+        private void ProcessTilesetSingle(string pathTsx, XElement xTileset, XElement xImage, IEnumerable<XElement> xTiles)
         {
             var relativePathTexture = xImage.GetAttributeAs<string>("source");
             var absolutePathTexture = GetAbsolutePathFromRelative(pathTsx, relativePathTexture);
@@ -92,6 +92,16 @@ namespace SuperTiled2Unity.Editor
             var margin = xTileset.GetAttributeAs<int>("margin", 0);
 
             var imageHeight = xImage.GetAttributeAs<int>("height");
+
+            var alignment = xTileset.GetAttributeAs<ObjectAlignment>("objectalignment", ObjectAlignment.Unspecified);
+            var defaultPivot = -ObjectAlignmentToPivot.ToVector3(1, 1, 1, MapOrientation.Orthogonal, alignment);
+
+            var xTileMapping = new Dictionary<int, XElement>();
+            foreach (var xTile in xTiles)
+            {
+                var id = xTile.GetAttributeAs<int>("id");
+                xTileMapping[id] = xTile;
+            }
 
             for (int i = 0; i < tileCount; i++)
             {
@@ -118,12 +128,45 @@ namespace SuperTiled2Unity.Editor
                     break;
                 }
 
-                m_SpriteRectangles.AddSpriteRectangle(pathTsx, absolutePathTexture, srcx, srcy, tileWidth, tileHeight);
+                var pivot = defaultPivot;
+                if (xTileMapping.TryGetValue(i, out var xTile)) {
+                    var xObjectGroup = xTile.Element("objectgroup");
+                    if (xObjectGroup != null) {
+                        foreach (var xObject in xObjectGroup.Elements()) {
+                            if (xObject.Name == "object"
+                                && (
+                                    StringConstants.Unity_Pivot.Equals(xObject.GetAttributeAs<string>("type"), System.StringComparison.OrdinalIgnoreCase) ||
+                                    StringConstants.Unity_Pivot.Equals(xObject.GetAttributeAs<string>("class"), System.StringComparison.OrdinalIgnoreCase)
+                                )
+                                && xObject.Element("point") != null
+                            ) {
+                                float objX = xObject.GetAttributeAs<int>("x");
+                                float objY = xObject.GetAttributeAs<int>("y");
+                                pivot = new Vector2(
+                                    objX / tileWidth,
+                                    1f - (objY / tileHeight)
+                                );
+                            }
+                        }
+                    }
+                }
+
+                m_SpriteRectangles.AddSpriteRectangle(pathTsx, absolutePathTexture, srcx, srcy, tileWidth, tileHeight, pivot);
             }
         }
 
         private void ProcessTilesetMultiple(string pathTsx, XElement xTileset, IEnumerable<XElement> xTiles)
         {
+            var alignment = xTileset.GetAttributeAs<ObjectAlignment>("objectalignment", ObjectAlignment.Unspecified);
+            var defaultPivot = -ObjectAlignmentToPivot.ToVector3(1, 1, 1, MapOrientation.Orthogonal, alignment);
+
+            var xTileMapping = new Dictionary<int, XElement>();
+            foreach (var xTile in xTiles)
+            {
+                var id = xTile.GetAttributeAs<int>("id");
+                xTileMapping[id] = xTile;
+            }
+
             foreach (var xTile in xTiles)
             {
                 var xImage = xTile.Element("image");
@@ -149,7 +192,28 @@ namespace SuperTiled2Unity.Editor
                         break;
                     }
 
-                    m_SpriteRectangles.AddSpriteRectangle(pathTsx, absolutePathTexture, tile_x, tile_y, tile_w, tile_h);
+                    var pivot = defaultPivot;
+                    var xObjectGroup = xTile.Element("objectgroup");
+                    if (xObjectGroup != null) {
+                        foreach (var xObject in xObjectGroup.Elements()) {
+                            if (xObject.Name == "object"
+                                && (
+                                    StringConstants.Unity_Pivot.Equals(xObject.GetAttributeAs<string>("type"), System.StringComparison.OrdinalIgnoreCase) ||
+                                    StringConstants.Unity_Pivot.Equals(xObject.GetAttributeAs<string>("class"), System.StringComparison.OrdinalIgnoreCase)
+                                )
+                                && xObject.Element("point") != null
+                            ) {
+                                float objX = xObject.GetAttributeAs<int>("x");
+                                float objY = xObject.GetAttributeAs<int>("y");
+                                pivot = new Vector2(
+                                    objX / tile_w,
+                                    1f - (objY / tile_h)
+                                );
+                            }
+                        }
+                    }
+
+                    m_SpriteRectangles.AddSpriteRectangle(pathTsx, absolutePathTexture, tile_x, tile_y, tile_w, tile_h, pivot);
                 }
             }
         }
@@ -251,7 +315,7 @@ namespace SuperTiled2Unity.Editor
         {
             private readonly HashSet<RectangleEntry> m_RectangleEntries = new HashSet<RectangleEntry>();
 
-            public void AddSpriteRectangle(string pathTsx, string pathTexture, int x, int y, int w, int h)
+            public void AddSpriteRectangle(string pathTsx, string pathTexture, int x, int y, int w, int h, Vector2 pivot)
             {
                 var spriteRectangle = new RectangleEntry
                 {
@@ -261,6 +325,7 @@ namespace SuperTiled2Unity.Editor
                     Y = y,
                     Width = w,
                     Height = h,
+                    Pivot = pivot,
                 };
 
                 m_RectangleEntries.Add(spriteRectangle);
@@ -272,10 +337,10 @@ namespace SuperTiled2Unity.Editor
                 m_RectangleEntries.RemoveWhere(r => r.AbsolutePathTsx == absoluteTsxPath);
             }
 
-            public IEnumerable<Rect> GetEntriesByTexture(string assetPathTexture)
+            public IEnumerable<(Rect, Vector2)> GetEntriesByTexture(string assetPathTexture)
             {
                 var absolutePathTexture = StandardizePath(assetPathTexture);
-                return m_RectangleEntries.Where(r => r.AbsolutePathTexture == absolutePathTexture).Select(r => new Rect(r.X, r.Y, r.Width, r.Height)).Distinct();
+                return m_RectangleEntries.Where(r => r.AbsolutePathTexture == absolutePathTexture).Select(r => (new Rect(r.X, r.Y, r.Width, r.Height), r.Pivot)).Distinct();
             }
 
             private string StandardizePath(string path)
@@ -291,6 +356,7 @@ namespace SuperTiled2Unity.Editor
                 public int Y { get; set; }
                 public int Width { get; set; }
                 public int Height { get; set; }
+                public Vector2 Pivot { get; set; }
 
                 public static bool operator ==(RectangleEntry lhs, RectangleEntry rhs) => lhs.Equals(rhs);
                 public static bool operator !=(RectangleEntry lhs, RectangleEntry rhs) => !(lhs == rhs);
@@ -312,7 +378,8 @@ namespace SuperTiled2Unity.Editor
                         X == other.X &&
                         Y == other.Y &&
                         Width == other.Width &&
-                        Height == other.Height;
+                        Height == other.Height &&
+                        Pivot == other.Pivot;
                 }
             }
         }

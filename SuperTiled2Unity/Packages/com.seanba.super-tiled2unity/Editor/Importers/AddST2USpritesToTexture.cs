@@ -10,7 +10,7 @@ namespace SuperTiled2Unity.Editor
 {
     internal static class AddST2USpritesToTexture
     {
-        internal static void AddSpritesToTextureAsset(string textureAssetPath, IEnumerable<Rect> rects)
+        internal static void AddSpritesToTextureAsset(string textureAssetPath, IEnumerable<(Rect, Vector2)> rects)
         {
             var texture2d = AssetDatabase.LoadAssetAtPath<Texture2D>(textureAssetPath);
             if (texture2d != null)
@@ -41,11 +41,11 @@ namespace SuperTiled2Unity.Editor
 
                     var additionalSpriteRects = rects.Select(r => new SpriteRect
                     {
-                        name = TilesetLoader.RectToSpriteName(r),
+                        name = TilesetLoader.RectToSpriteName(r.Item1, r.Item2),
                         spriteID = GUID.Generate(),
-                        rect = r,
-                        pivot = Vector2.zero,
-                        alignment = SpriteAlignment.BottomLeft,
+                        rect = r.Item1,
+                        pivot = r.Item2,
+                        alignment = SpriteAlignment.Custom,
                     }).ToList();
 
                     while (additionalSpriteRects.Count > 0)
