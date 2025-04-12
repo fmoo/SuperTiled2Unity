@@ -448,11 +448,29 @@ namespace SuperTiled2Unity.Editor
                     // Replace the super object with the instantiated prefab
                     var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
                     instance.transform.SetParent(so.transform.parent);
-                    instance.transform.position = so.transform.position + prefab.transform.localPosition;
+
+                    // HACK to fix positioning of rect game objects getting prefab replaced.
+                    // Does not play nice with other shapes.
+                    Vector3 offset = Vector3.zero;
+                    if (so.m_TileId == 0)
+                    {
+                        offset = new Vector3(
+                            so.m_Width / 2f / ST2USettings.instance.m_DefaultPixelsPerUnit,
+                            -so.m_Height / 2f / ST2USettings.instance.m_DefaultPixelsPerUnit,
+                            0f
+                        );
+                    }
+                    instance.transform.position = so.transform.position + prefab.transform.localPosition + offset;
+                    // END HACK
                     instance.transform.rotation = so.transform.rotation;
 
                     // Keep the name from Tiled.
                     instance.name = so.gameObject.name;
+
+                    // Copy layer tag over to all transforms
+                    foreach (var t in instance.GetComponentsInChildren<Transform>(includeInactive: true)) {
+                        t.gameObject.layer = so.gameObject.layer;
+                    }
 
                     // Update bookkeeping for later custom property replacement.
                     goToDestroy.Add(so.gameObject);
@@ -464,14 +482,108 @@ namespace SuperTiled2Unity.Editor
             // where object references can now also point to the new replacement instances.
             foreach (var so in supers)
             {
+                var target = m_ObjectsById[so.m_Id];
+
                 // Apply custom properties as messages to the instanced prefab
                 var props = so.GetComponent<SuperCustomProperties>();
                 if (props != null)
                 {
                     foreach (var p in props.m_Properties)
                     {
-                        m_ObjectsById[so.m_Id].BroadcastProperty(p, m_ObjectsById, ReportGenericError);
+                        target.BroadcastProperty(p, m_ObjectsById, ReportGenericError);
                     }
+                }
+
+                // If the target is still the SuperObject, this isn't a prefab replacement, and
+                // we should skip making copies of these fields.
+                if (target == so.gameObject)
+                {
+                    continue;
+                }
+
+                var copyChildren = so.gameObject.GetSuperPropertyValueBool(StringConstants.Unity_PrefabKeepTile, false);
+                bool destroyCollider = SuperImportContext.LayerIgnoreMode == LayerIgnoreMode.True || SuperImportContext.LayerIgnoreMode == LayerIgnoreMode.Collision || copyChildren;
+                Collider2D destroyColliderComponent = null;
+
+                // Copy SuperObject/SuperCustomProperty if unity:prefabKeepObject is true
+                if (so.gameObject.GetSuperPropertyValueBool(StringConstants.Unity_PrefabKeepObject, false))
+                {
+                    var superObjectCopy = target.gameObject.AddComponent<SuperObject>();
+                    EditorUtility.CopySerialized(so, superObjectCopy);
+                    if (props != null)
+                    {
+                        var superPropsCopy = target.gameObject.AddComponent<SuperCustomProperties>();
+                        EditorUtility.CopySerialized(props, superPropsCopy);
+                    }
+                }
+
+                // Copy colliders if unity:prefabKeepCollider is true
+                if (so.gameObject.GetSuperPropertyValueBool(StringConstants.Unity_PrefabKeepCollider, false) && !copyChildren)
+                {
+                    // If the new prefab has a spriteRenderer at the root of the component, and has a *custom* unity pivot,
+                    // then we need to finagle the origin a bit more, since where tiled renders the tiled is based only on the tileset's object alignment.
+                    if (so.m_SuperTile && target.GetComponent<SpriteRenderer>() != null) {
+                        var tile = so.m_SuperTile;
+                        // If there was a custom pivot, we need to under the positional offset so the prefab lands in the right spot
+                        if (tile != null && tile.m_HasCustomPivot) {
+                            Debug.Log($"Adjusting positional offset for {target.name} to account for custom pivot", target);
+                            // Offset the colliderCopy root to account
+                            target.transform.position += new Vector3(
+                                tile.m_TileOffsetX / ST2USettings.instance.m_DefaultPixelsPerUnit,
+                                -tile.m_TileOffsetY / ST2USettings.instance.m_DefaultPixelsPerUnit,
+                                0f
+                            );
+                        }
+                    }
+
+                    if (TryGetComponentInChildren<Collider2D>(so.gameObject, out var origCollider))
+                    {
+                        destroyColliderComponent = target.gameObject.GetComponent<Collider2D>();
+                        var colliderCopy = target.gameObject.AddComponent(origCollider.GetType()) as Collider2D;
+                        EditorUtility.CopySerialized(origCollider, colliderCopy);
+                        colliderCopy.offset = Vector2.zero;
+                        // If we're copying a collider from *child* objects on the source to a collider on the root object, the offset needs to be adjusted to account for that.
+                        if (origCollider.gameObject == so.gameObject) {
+                            colliderCopy.offset = Vector2.zero;
+                        } else {
+                            colliderCopy.offset = (Vector2)origCollider.transform.position - (Vector2)so.transform.position + origCollider.offset;
+                        }
+
+                        // If the new prefab has a spriteRenderer at the root of the component, and has a *custom* unity pivot,
+                        // then we need to finagle the origin a bit more, since where tiled renders the tiled is based only on the tileset's object alignment.
+                        if (so.m_SuperTile && target.GetComponent<SpriteRenderer>() != null) {
+                            var tile = so.m_SuperTile;
+                            // If there was a custom pivot, we need to re-adjust the collision to counter the positional offset from earlier
+                            if (tile != null && tile.m_HasCustomPivot) {
+                                Debug.Log($"Adjusting collider offset for {colliderCopy.name} to account for custom pivot", colliderCopy);
+                                colliderCopy.offset += new Vector2(-tile.m_TileOffsetX, tile.m_TileOffsetY) / ST2USettings.instance.m_DefaultPixelsPerUnit;
+                            }
+                        }
+
+                    } else {
+                        destroyCollider = true;
+                    }
+                    if (so.TryGetComponent<SuperColliderComponent>(out var origSuperCollider))
+                    {
+                        var superColliderCopy = target.gameObject.AddComponent<SuperColliderComponent>();
+                        EditorUtility.CopySerialized(origSuperCollider, superColliderCopy);
+                    }
+                }
+                else if (copyChildren)
+                {
+                    // Copy colliders from children if unity:prefabKeepTile is true
+                    foreach (Transform child in so.transform)
+                    {
+                        child.transform.SetParent(target.transform, true);
+                    }
+                }
+
+                if (destroyCollider && target.TryGetComponent<Collider2D>(out var collider)) {
+                    DestroyImmediate(collider);
+                }
+                if (destroyColliderComponent != null) {
+                    // Debug.Log($"Destroying collider {destroyColliderComponent}", destroyColliderComponent);
+                    DestroyImmediate(destroyColliderComponent);
                 }
             }
 
@@ -480,6 +592,12 @@ namespace SuperTiled2Unity.Editor
             {
                 DestroyImmediate(go);
             }
+        }
+
+        public bool TryGetComponentInChildren<T>(GameObject go, out T component) where T : Component
+        {
+            component = go.GetComponentInChildren<T>();
+            return component != null;
         }
 
         private void DoCustomImporting()
